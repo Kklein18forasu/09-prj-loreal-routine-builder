@@ -1,92 +1,231 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>L'Oréal | Smart Routine &amp; Product Advisor</title>
-    <link
-      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;500;700&display=swap"
-      rel="stylesheet"
-    />
-    <link
-      rel="stylesheet"
-      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css"
-    />
-    <link rel="stylesheet" href="style.css" />
-  </head>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>L'Oréal | Smart Routine Advisor</title>
 
-  <body>
-    <div class="page-wrapper">
-      <!------- Header / Branding ------->
-      <header class="site-header">
-        <img src="img/loreal-logo.png" alt="L'Oréal Logo" class="logo" />
-        <h1 class="site-title">Smart Routine &amp; Product Advisor</h1>
-      </header>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;500;700&display=swap" rel="stylesheet"/>
 
-      <!-- Category Filter -->
-      <div class="search-section">
-        <select id="categoryFilter">
-          <option value="" disabled selected>Choose a Category</option>
-          <option value="cleanser">Cleansers</option>
-          <option value="moisturizer">Moisturizers & Treatments</option>
-          <option value="haircare">Haircare</option>
-          <option value="makeup">Makeup</option>
-          <option value="hair color">Hair Color</option>
-          <option value="hair styling">Hair Styling</option>
-          <option value="men's grooming">Men's Grooming</option>
-          <option value="suncare">Suncare</option>
-          <option value="fragrance">Fragrance</option>
-        </select>
-      </div>
+  <style>
+    body {
+      font-family: "Montserrat", sans-serif;
+      background: #fff;
+      padding: 20px;
+      max-width: 1000px;
+      margin: auto;
+    }
 
-      <!-- Products Grid -->
-      <div id="productsContainer" class="products-grid"></div>
+    h1 {
+      text-align: center;
+    }
 
-      <!-- Selected Products -->
-      <div class="selected-products">
-        <h2>Selected Products</h2>
-        <div id="selectedProductsList"></div>
-        <button id="generateRoutine" class="generate-btn">
-          <i class="fa-solid fa-wand-magic-sparkles"></i> Generate Routine
-        </button>
-      </div>
+    select, input {
+      padding: 10px;
+      margin: 10px 5px;
+      width: 48%;
+    }
 
-      <!------- Chat Area ------->
-      <section class="chatbox">
-        <h2>Let's Build Your Routine</h2>
-        <div id="chatWindow" class="chat-window"></div>
+    .products {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin: 20px 0;
+    }
 
-        <form id="chatForm" class="chat-form">
-          <label for="userInput" class="visually-hidden">Message</label>
-          <input
-            id="userInput"
-            name="userInput"
-            type="text"
-            placeholder="Ask me about products or routines…"
-            autocomplete="off"
-            required
-          />
-          <button type="submit" id="sendBtn">
-            <i class="fa-solid fa-paper-plane"></i>
-            <span class="visually-hidden">Send</span>
-          </button>
-        </form>
-      </section>
+    .product {
+      border: 1px solid #ccc;
+      padding: 10px;
+      cursor: pointer;
+    }
 
-      <!------- Footer Links ------->
-      <footer class="site-footer">
-        <p>&copy; 2025 L'Oréal. All rights reserved.</p>
-        <nav>
-          <!-- These URLs are placeholders -->
-          <a href="#">Privacy Policy</a>
-          <a href="#">Terms of Use</a>
-          <a href="#">Contact</a>
-        </nav>
-      </footer>
+    .selected {
+      border: 2px solid red;
+    }
+
+    button {
+      padding: 12px;
+      width: 100%;
+      background: red;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+
+    .chat {
+      margin-top: 20px;
+      border: 1px solid #ccc;
+      padding: 10px;
+      height: 200px;
+      overflow-y: auto;
+    }
+
+    .msg {
+      margin: 5px 0;
+    }
+  </style>
+</head>
+
+<body>
+
+<h1>L'Oréal Routine Builder</h1>
+
+<select id="category">
+  <option value="">All</option>
+  <option value="cleanser">Cleanser</option>
+  <option value="moisturizer">Moisturizer</option>
+  <option value="skincare">Skincare</option>
+  <option value="haircare">Haircare</option>
+  <option value="makeup">Makeup</option>
+</select>
+
+<input id="search" placeholder="Search products..." />
+
+<div id="products" class="products"></div>
+
+<h3>Selected Products</h3>
+<div id="selected"></div>
+
+<button id="generate">Generate Routine</button>
+
+<div class="chat" id="chat"></div>
+
+<input id="chatInput" placeholder="Ask follow up..." />
+<button id="send">Send</button>
+
+<script>
+const WORKER_URL = "https://wispy-feather-ddc6.kklein18.workers.dev";
+
+let products = [];
+let selected = [];
+let history = [];
+
+const productsDiv = document.getElementById("products");
+const selectedDiv = document.getElementById("selected");
+const chat = document.getElementById("chat");
+
+/* LOAD PRODUCTS */
+async function load() {
+  const res = await fetch("products.json");
+  const data = await res.json();
+  products = data.products;
+  render();
+}
+
+/* RENDER PRODUCTS */
+function render() {
+  const category = document.getElementById("category").value;
+  const search = document.getElementById("search").value.toLowerCase();
+
+  let list = products;
+
+  if (category) {
+    list = list.filter(p => p.category === category);
+  }
+
+  if (search) {
+    list = list.filter(p =>
+      p.name.toLowerCase().includes(search) ||
+      p.brand.toLowerCase().includes(search)
+    );
+  }
+
+  productsDiv.innerHTML = list.map(p => `
+    <div class="product ${selected.includes(p.id) ? "selected" : ""}" data-id="${p.id}">
+      <img src="${p.image}" width="100"/>
+      <h4>${p.name}</h4>
+      <p>${p.brand}</p>
     </div>
+  `).join("");
 
-    <!-- secrets.js can be removed when using Cloudflare Workers for API requests -->
-    <script src="secrets.js"></script>
-    <script src="script.js"></script>
-  </body>
+  document.querySelectorAll(".product").forEach(el => {
+    el.onclick = () => {
+      const id = Number(el.dataset.id);
+      if (selected.includes(id)) {
+        selected = selected.filter(i => i !== id);
+      } else {
+        selected.push(id);
+      }
+      render();
+      renderSelected();
+    };
+  });
+}
+
+/* RENDER SELECTED */
+function renderSelected() {
+  selectedDiv.innerHTML = products
+    .filter(p => selected.includes(p.id))
+    .map(p => `<div>${p.name}</div>`)
+    .join("");
+}
+
+/* CHAT MESSAGE */
+function msg(role, text) {
+  chat.innerHTML += `<div class="msg"><b>${role}:</b> ${text}</div>`;
+  chat.scrollTop = chat.scrollHeight;
+}
+
+/* CALL WORKER */
+async function callAI(messages, selectedProducts) {
+  const res = await fetch(WORKER_URL, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({messages, selectedProducts})
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) throw new Error(data.error || "error");
+
+  return data.reply;
+}
+
+/* GENERATE ROUTINE */
+document.getElementById("generate").onclick = async () => {
+  if (!selected.length) {
+    msg("bot", "Select products first");
+    return;
+  }
+
+  const selectedProducts = products.filter(p => selected.includes(p.id));
+
+  msg("you", "Generate my routine");
+
+  try {
+    const reply = await callAI(
+      [{role:"user", content:"Generate routine"}],
+      selectedProducts
+    );
+    msg("bot", reply);
+  } catch (e) {
+    msg("bot", e.message);
+  }
+};
+
+/* CHAT */
+document.getElementById("send").onclick = async () => {
+  const input = document.getElementById("chatInput");
+  const text = input.value;
+  if (!text) return;
+
+  msg("you", text);
+  input.value = "";
+
+  try {
+    const reply = await callAI([{role:"user", content:text}], []);
+    msg("bot", reply);
+  } catch (e) {
+    msg("bot", e.message);
+  }
+};
+
+/* EVENTS */
+document.getElementById("category").onchange = render;
+document.getElementById("search").oninput = render;
+
+load();
+</script>
+
+</body>
 </html>
